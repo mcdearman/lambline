@@ -2,8 +2,13 @@ cabal-version:   3.0
 name:            lambline
 version:         0.1.0.0
 synopsis:        A line editor: a port of rustyline
+license:         BSD-3-Clause
+license-file:    LICENSE
+author:          Chris McDearman
 build-type:      Simple
-extra-doc-files: README.md
+extra-doc-files:
+  NOTICE
+  README.md
 
 common shared
   default-language:   GHC2021
