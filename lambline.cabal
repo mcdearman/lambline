@@ -1,0 +1,54 @@
+cabal-version:   3.0
+name:            lambline
+version:         0.1.0.0
+synopsis:        A line editor: a port of rustyline
+build-type:      Simple
+extra-doc-files: README.md
+
+common shared
+  default-language:   GHC2021
+  default-extensions: LambdaCase
+  ghc-options:        -Wall
+  build-depends:      base >=4.18 && <5
+
+library
+  import:          shared
+  hs-source-dirs:  src
+  exposed-modules:
+    Lambline
+    Lambline.Binding
+    Lambline.Command
+    Lambline.Config
+    Lambline.Engine
+    Lambline.Helper
+    Lambline.History
+    Lambline.Keys
+    Lambline.KillRing
+    Lambline.Layout
+    Lambline.LineBuffer
+    Lambline.Terminal
+    Lambline.Undo
+
+  c-sources:       cbits/terminal.c
+  build-depends:
+    , containers
+    , directory
+    , mtl
+    , transformers
+    , unix
+
+executable lambline-demo
+  import:         shared
+  hs-source-dirs: demo
+  main-is:        Main.hs
+  build-depends:  lambline
+
+test-suite spec
+  import:         shared
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Main.hs
+  build-depends:
+    , containers
+    , directory
+    , lambline
