@@ -13,20 +13,13 @@ import Control.Monad (when)
 import Data.Char (isDigit)
 import Data.IORef
 import Data.Maybe (isNothing)
-import Foreign.C.Types (CInt (..))
 import qualified Lambline.Command as Cmd
 import Lambline.Config
+import qualified Lambline.Console as Console
 import Lambline.Keys
 import System.Environment (lookupEnv)
 import System.IO
 import System.IO.Error (isEOFError)
-import System.Posix.IO (stdInput, stdOutput)
-import System.Posix.Signals (raiseSignal, sigTSTP)
-import System.Posix.Terminal
-
-foreign import ccall unsafe "lambline_columns" c_columns :: CInt -> IO CInt
-
-foreign import ccall unsafe "lambline_rows" c_rows :: CInt -> IO CInt
 
 -- | Something that happens while the editor waits.
 data TermEvent
@@ -62,13 +55,10 @@ data Term = Term
 -- and it understands control sequences.
 interactive :: IO Bool
 interactive = do
-  input <- queryTerminal stdInput
-  output <- queryTerminal stdOutput
-  supported <- supportedTerm
+  input <- Console.inputIsTerminal
+  output <- Console.outputIsTerminal
+  supported <- Console.supported
   pure (input && output && supported)
-
-supportedTerm :: IO Bool
-supportedTerm = (`notElem` [Nothing, Just "", Just "dumb", Just "cons25", Just "emacs"]) <$> lookupEnv "TERM"
 
 -- | Run an action with the terminal ready for editing: keys delivered as
 -- they are typed, unechoed and uninterpreted. Output is left alone, so a
@@ -77,55 +67,46 @@ supportedTerm = (`notElem` [Nothing, Just "", Just "dumb", Just "cons25", Just "
 -- Messages put in the queue arrive as 'ExternalPrint' events.
 withTerminal :: Config -> MVar [String] -> (Term -> IO a) -> IO a
 withTerminal config queue action = do
-  attrs <- getTerminalAttributes stdInput
   colors <- case colorMode config of
     Forced -> pure True
     Disabled -> pure False
     Enabled -> do
-      output <- queryTerminal stdOutput
-      supported <- supportedTerm
+      output <- Console.outputIsTerminal
+      supported <- Console.supported
       noColor <- lookupEnv "NO_COLOR"
       pure (output && supported && isNothing noColor)
   lastColumns <- columns >>= newIORef
-  let off =
-        [EnableEcho, ProcessInput, ExtendedFunctions, StartStopOutput, MapCRtoLF, InterruptOnBreak, CheckParity, StripHighBit]
-          ++ [KeyboardInterrupts | not (enableSignals config)]
-      raw = withTime (withMinInput (withBits (foldl withoutMode attrs off) 8) 1) 0
-      enter = do
+  let enter = do
         buffering <- hGetBuffering stdin
-        setTerminalAttributes stdInput raw WhenDrained
+        saved <- Console.raw (enableSignals config)
         hSetBuffering stdin NoBuffering
-        pure buffering
-      leave buffering = do
+        pure (buffering, saved)
+      leave (buffering, saved) = do
         hSetBuffering stdin buffering
-        setTerminalAttributes stdInput attrs WhenDrained
+        Console.restore saved
       paste = when (enableBracketedPaste config) . write
-      -- With signals enabled the driver handles these keys itself.
-      special = if enableSignals config then [] else [(Interrupt, Cmd.Interrupt), (Quit, Cmd.Interrupt), (Suspend, Cmd.Suspend)]
-      bindings =
-        [(key c, cmd) | (which, cmd) <- (EndOfFile, Cmd.EndOfFile) : special, Just c <- [controlChar attrs which]]
-      term buffering =
+      term entered@(_, saved) =
         Term
           { termEvent = event lastColumns,
             termChar = next source,
             termPaste = readPaste source,
             termWrite = write,
             termColumns = columns,
-            termRows = fromIntegral <$> c_rows 1,
+            termRows = Console.rows,
             termColors = colors,
-            termBindings = bindings,
+            termBindings = Console.controls saved (enableSignals config),
             termSuspend = do
-              leave buffering
-              raiseSignal sigTSTP
+              leave entered
+              Console.suspend
               _ <- enter
               pure (),
             termCursorColumn = cursorColumn
           }
-  bracket enter leave $ \buffering ->
-    bracket_ (paste "\ESC[?2004h") (paste "\ESC[?2004l") (action (term buffering))
+  bracket enter leave $ \entered ->
+    bracket_ (paste "\ESC[?2004h") (paste "\ESC[?2004l") (action (term entered))
   where
     write s = hPutStr stdout s >> hFlush stdout
-    columns = fromIntegral <$> c_columns 1
+    columns = Console.columns
 
     -- Wake every so often to look for messages and a change of width.
     event lastColumns singleEsc = do
