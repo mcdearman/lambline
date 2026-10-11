@@ -34,13 +34,21 @@ library
     Lambline.Terminal
     Lambline.Undo
 
-  c-sources:       cbits/terminal.c
+  -- What differs between systems in driving a terminal.
+  other-modules:   Lambline.Console
   build-depends:
     , containers
     , directory
     , mtl
     , transformers
-    , unix
+
+  if os(windows)
+    hs-source-dirs: windows
+    c-sources:      cbits/console.c
+  else
+    hs-source-dirs: posix
+    c-sources:      cbits/terminal.c
+    build-depends:  unix
 
 executable lambline-demo
   import:         shared

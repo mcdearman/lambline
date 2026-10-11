@@ -57,6 +57,7 @@ import qualified Data.Map as Map
 import Lambline.Binding
 import Lambline.Command
 import Lambline.Config
+import qualified Lambline.Console as Console
 import Lambline.Engine
 import Lambline.Helper
 import Lambline.History (History)
@@ -66,8 +67,6 @@ import Lambline.KillRing (KillRing)
 import qualified Lambline.KillRing as KillRing
 import Lambline.Terminal
 import System.IO
-import System.Posix.IO (stdInput)
-import System.Posix.Terminal (queryTerminal)
 
 data Editor = Editor
   { edConfig :: Config,
@@ -132,7 +131,7 @@ readlineWithInitial editor prompt initial = do
 -- | Read input without a terminal to edit it on.
 direct :: Maybe Helper -> String -> IO (Either ReadlineError String)
 direct helper prompt = do
-  tty <- queryTerminal stdInput
+  tty <- Console.inputIsTerminal
   when tty (hPutStr stdout prompt >> hFlush stdout)
   go ""
   where

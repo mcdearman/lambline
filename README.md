@@ -28,7 +28,13 @@ main = do
 `cabal run lambline-demo` runs something like that (`-- vi` for Vi mode,
 `-- ticks` to watch another thread print while you type). `cabal test` runs
 the tests. It needs only GHC and the libraries that ship with it, on a POSIX
-system.
+system or on Windows 10 or later.
+
+On Windows the console is asked to behave as a terminal does: to send keys
+as the control sequences a terminal sends, and to obey the ones written to
+it. Everything else is then the same code. Text is read and written as
+UTF-8 while a line is being edited. Ctrl-D ends the input, as it does
+elsewhere, and there is no Ctrl-Z to suspend with.
 
 ## What is ported
 
@@ -93,7 +99,9 @@ Two things are added:
 
 Some things are left out:
 
-- Windows, and reading from `/dev/tty` instead of stdin (`Behavior`).
+- Reading from `/dev/tty` instead of stdin (`Behavior`).
+- Consoles that do not understand control sequences, which on Windows is
+  those before Windows 10. On one of those lines are read plainly.
 - Fuzzy completion, which rustyline does with skim.
 - History in SQLite, and locking of history files.
 - Grapheme clusters: each character is taken as one, and its width is
@@ -129,6 +137,7 @@ And a few behave differently:
 | `Lambline.Undo`, `Lambline.KillRing`, `Lambline.History` | What their names say. |
 | `Lambline.Layout` | Where text lands on screen, and the redraw. |
 | `Lambline.Terminal` | What the engine needs of a terminal, and the real one. |
+| `Lambline.Console` | What differs between systems in driving one: `posix/` over termios, `windows/` over the console. Not exposed. |
 
 The engine reaches the terminal only through a record of functions, so the
 tests run whole editing sessions against a fake one: keys from a list, and
